@@ -19,8 +19,8 @@ include $(shell cocotb-config --makefiles)/Makefile.sim
 # Directory for HTML report
 COVERAGE_HTML_DIR = coverage_html
 
-.PHONY: runwave
-runwave:
+.PHONY: wave
+wave:
 	@if [ -f waveform.gtkw ]; then \
 		echo "Launching GTKWave with saved layout..."; \
 		gtkwave dump.fst waveform.gtkw & \

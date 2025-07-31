@@ -1,5 +1,4 @@
 //==========================================================
-// File: spi_master_bmm150.sv
 // Description: FSM-based SPI Master for BMM150 magnetometer
 // Author: Abdullah Alnafisah
 //==========================================================
@@ -97,9 +96,12 @@ module spi_master_bmm150 #(
       bit_cnt <= 0;
       shift_reg <= 8'h00;
       rx_data <= 8'h00;
+      busy <= 1;
     end else begin
+      busy <= 1;
       case (state)
         IDLE: begin
+          busy <= 0;
           cs_n <= 1'b1;
           bit_cnt <= 0;
         end
@@ -143,7 +145,6 @@ module spi_master_bmm150 #(
   end
 
 
-  assign busy = (state != IDLE && state != COMPLETE);
   assign done = (state == COMPLETE);
 
 endmodule
