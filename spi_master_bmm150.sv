@@ -106,10 +106,11 @@ module spi_master_bmm150 #(
       bits_cnt <= 0;
       done <= 1'b0;
     end else begin
-      case (state) 
+      case (state)
         IDLE: begin
-          busy <= 1'b0;
-          done <= 1'b0;
+          busy   <= 1'b0;
+          done   <= 1'b0;
+          mosi_b <= 1'b1;
         end
         SEND_RW: begin
           busy <= 1'b1;
@@ -135,6 +136,7 @@ module spi_master_bmm150 #(
         COMPLETE: begin
           if (prev_sclk_b == 1'b0 && sclk_b == 1'b1) begin
             rx_data[7-bits_cnt-1] <= miso;
+          end else if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
             done <= 1'b1;
           end
         end
