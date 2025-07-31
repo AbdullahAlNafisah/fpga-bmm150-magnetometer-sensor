@@ -5,8 +5,8 @@
 `timescale 1ns / 1ps
 
 module spi_master_bmm150 #(
-    parameter int CLK_HZ  = 50_000_000,  // Input system clock frequency (Hz)
-    parameter int SPI_CLK = 5_000_000    // Desired SPI clock (Hz)
+    parameter CLK_HZ  = 50_000_000,  // Input system clock frequency (Hz)
+    parameter SPI_CLK = 5_000_000    // Desired SPI clock (Hz)
 ) (
     input logic clk,
     input logic rst_n,
@@ -79,8 +79,6 @@ module spi_master_bmm150 #(
       state <= next_state;
     end
   end
-
-
 
 
   // Internal registers
