@@ -8,6 +8,10 @@ The BMM150 is a low-power, high-resolution 3-axis digital geomagnetic sensor. Th
 - Resolution: 0.3 µT
 - Supporting register burst reads
 
+## Power Modes
+
+<img src="assets/mode_diagram.png" width="500">
+
 ## SPI Interface
 
 - **Mode**: SPI Mode 0 (CPOL=0, CPHA=0) or Mode 3 (CPOL=1, CPHA=1)
@@ -15,8 +19,6 @@ The BMM150 is a low-power, high-resolution 3-axis digital geomagnetic sensor. Th
   - MSB: Read/Write bit (1 = Read, 0 = Write)
   - Bits 6:0: 7-bit register address
   - Next 8 bits: Data (write) or dummy (read)
-
-![Mode Transition Diagram](assets/mode_diagram.png)
 
 ## Register Map Summary
 
@@ -26,6 +28,8 @@ The BMM150 is a low-power, high-resolution 3-axis digital geomagnetic sensor. Th
 | 0x4B      | POWER_CTRL     | Bit 0 enables power              |
 | 0x4C      | OPMODE/ODR     | Set operation mode and data rate |
 | 0x42–0x49 | Data Registers | DATAX, DATAY, DATAZ, RHALL       |
+
+<img src="assets/register_map.png">
 
 ### Data Format
 
