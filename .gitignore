@@ -1,0 +1,9 @@
+*/__pycache__
+*/sim_build
+results.xml
+*/coverage_html
+coverage.dat
+coverage.info
+dump.fst
+waveform.gtkw
+
