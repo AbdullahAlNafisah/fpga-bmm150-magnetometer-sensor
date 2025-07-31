@@ -106,7 +106,7 @@ module spi_master_bmm150 #(
       bits_cnt <= 0;
       done <= 1'b0;
     end else begin
-      case (state)
+      case (state) 
         IDLE: begin
           busy <= 1'b0;
           done <= 1'b0;
