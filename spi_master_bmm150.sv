@@ -5,16 +5,18 @@
 `timescale 1ns / 1ps
 
 module spi_master_bmm150 #(
-    parameter CLK_DIV = 4  // Clock divider for SCLK generation
+    parameter int CLK_HZ  = 50_000_000,  // Input system clock frequency (Hz)
+    parameter int SPI_CLK = 5_000_000    // Desired SPI clock (Hz)
 ) (
     input logic clk,
     input logic rst_n,
+    input logic enable,
 
     // Control Interface
     input  logic       start,     // Start SPI transaction
-    input  logic [7:0] tx_data,   // Data to send
-    input  logic [7:0] reg_addr,  // Register address
     input  logic       rw,        // 0=Write, 1=Read
+    input  logic [6:0] reg_addr,  // Register address
+    input  logic [7:0] tx_data,   // Data to send
     output logic [7:0] rx_data,   // Data received
     output logic       busy,      // Transaction in progress
     output logic       done,      // Transaction complete
@@ -26,45 +28,50 @@ module spi_master_bmm150 #(
     output logic cs_n
 );
 
-  // FSM States
-  typedef enum logic [2:0] {
-    IDLE,
-    ASSERT_CS,
-    SEND_ADDR,
-    SEND_DATA,
-    RECEIVE_DATA,
-    DEASSERT_CS,
-    COMPLETE
-  } state_t;
-
-  state_t state, next_state;
-
-  // Internal registers
-  logic [7:0] shift_reg;
-  logic [3:0] bit_cnt;
-  logic [15:0] clk_div_cnt;
-  logic sclk_int;
-
-  // Clock divider for SCLK
+  // Clock pulse generation
+  localparam integer DIVIDER = CLK_HZ / (2 * SPI_CLK);
+  localparam integer COUNTER_WIDTH = $clog2(DIVIDER);
+  logic [COUNTER_WIDTH-1:0] clk_cnt;
+  logic clk_pulse, sclk_b, prev_sclk_b;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      clk_div_cnt <= 0;
-      sclk_int    <= 0;
-    end else if (state != IDLE) begin
-      if (clk_div_cnt == (CLK_DIV - 1)) begin
-        clk_div_cnt <= 0;
-        sclk_int    <= ~sclk_int;
+      clk_cnt <= 0;
+      clk_pulse <= 1'b0;
+      sclk_b <= 1'b1;
+      prev_sclk_b <= 1'b1;
+    end else if (enable) begin
+      clk_pulse   <= 1'b0;
+      prev_sclk_b <= sclk_b;
+      if (start) begin
+        clk_cnt <= 0;
+        clk_pulse <= 1'b1;
+        sclk_b <= 1'b1;
+      end else if (clk_cnt == COUNTER_WIDTH'(DIVIDER - 1)) begin
+        clk_cnt <= 0;
+        clk_pulse <= 1'b1;
+        sclk_b <= !sclk_b;
       end else begin
-        clk_div_cnt <= clk_div_cnt + 1;
+        clk_cnt <= clk_cnt + 1;
       end
+
     end else begin
-      sclk_int <= 0;
+      clk_cnt <= 0;
+      clk_pulse <= 1'b0;
+      prev_sclk_b <= 1'b1;
+      sclk_b <= 1'b1;
     end
   end
+  assign sclk = (state != IDLE && next_state != IDLE) ? sclk_b : 1'b1;
 
-  assign sclk = sclk_int;
-
-  // FSM sequential
+  // FSM States
+  typedef enum logic [7:0] {
+    IDLE,
+    SEND_RW,
+    SEND_ADDR,
+    SEND_RECEIVE_DATA,
+    COMPLETE
+  } state_t;
+  state_t state, next_state;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       state <= IDLE;
@@ -73,78 +80,72 @@ module spi_master_bmm150 #(
     end
   end
 
+
+
+
+  // Internal registers
+  logic mosi_b;
+  logic [4:0] bits_cnt;
+
   // FSM combinational
   always_comb begin
     next_state = state;
     case (state)
-      IDLE: if (start) next_state = ASSERT_CS;
-      ASSERT_CS: next_state = SEND_ADDR;
-      SEND_ADDR: if (bit_cnt == 8 && !sclk_int) next_state = (rw) ? RECEIVE_DATA : SEND_DATA;
-      SEND_DATA: if (bit_cnt == 8 && !sclk_int) next_state = DEASSERT_CS;
-      RECEIVE_DATA: if (bit_cnt == 8 && !sclk_int) next_state = DEASSERT_CS;
-      DEASSERT_CS: next_state = COMPLETE;
-      COMPLETE: next_state = IDLE;
+      IDLE: if (enable && start) next_state = SEND_RW;
+      SEND_RW: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = SEND_ADDR;
+      SEND_ADDR: if (bits_cnt == 0) next_state = SEND_RECEIVE_DATA;
+      SEND_RECEIVE_DATA: if (bits_cnt == 8) next_state = COMPLETE;
+      COMPLETE: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = IDLE;
       default: next_state = IDLE;
     endcase
   end
 
-  // Output and shift register
+  // Sequential logic
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      cs_n <= 1'b1;
-      mosi <= 1'b0;
-      bit_cnt <= 0;
-      shift_reg <= 8'h00;
-      rx_data <= 8'h00;
-      busy <= 1;
+      busy <= 1'b1;
+      mosi_b <= 1'b1;
+      bits_cnt <= 0;
     end else begin
-      busy <= 1;
       case (state)
         IDLE: begin
-          busy <= 0;
-          cs_n <= 1'b1;
-          bit_cnt <= 0;
+          busy <= 1'b0;
         end
-        ASSERT_CS: begin
-          cs_n <= 1'b0;
-          shift_reg <= reg_addr;
+        SEND_RW: begin
+          busy <= 1'b1;
+          if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
+            mosi_b   <= rw;
+            bits_cnt <= 7;
+          end
         end
         SEND_ADDR: begin
-          if (!sclk_int) begin
-            mosi <= shift_reg[7];
-            shift_reg <= {shift_reg[6:0], 1'b0};
-            bit_cnt <= bit_cnt + 1;
+          if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
+            mosi_b   <= reg_addr[bits_cnt-1];
+            bits_cnt <= bits_cnt - 1;
           end
         end
-        SEND_DATA: begin
-          if (bit_cnt == 0) shift_reg <= tx_data;
-          if (!sclk_int) begin
-            mosi <= shift_reg[7];
-            shift_reg <= {shift_reg[6:0], 1'b0};
-            bit_cnt <= bit_cnt + 1;
+        SEND_RECEIVE_DATA: begin
+          if (prev_sclk_b == 1'b0 && sclk_b == 1'b1) begin
+            rx_data[7-bits_cnt] <= miso;
+          end else if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
+            mosi_b   <= tx_data[7-bits_cnt];
+            bits_cnt <= bits_cnt + 1;
           end
         end
-        RECEIVE_DATA: begin
-          if (!sclk_int) begin
-            shift_reg <= {shift_reg[6:0], miso};
-            bit_cnt   <= bit_cnt + 1;
+        COMPLETE: begin
+          if (prev_sclk_b == 1'b0 && sclk_b == 1'b1) begin
+            rx_data[7-bits_cnt-1] <= miso;
           end
-          if (bit_cnt == 8) rx_data <= shift_reg;
-        end
-        DEASSERT_CS: begin
-          cs_n <= 1'b1;
         end
         default: begin
-          // Safe fallback
-          cs_n <= 1'b1;
-          mosi <= 1'b0;
-          bit_cnt <= 0;
+          busy <= 1'b1;
+          mosi_b <= 1'b1;
+          bits_cnt <= 0;
         end
       endcase
     end
   end
-
-
-  assign done = (state == COMPLETE);
+  assign cs_n = (state != IDLE) ? 1'b0 : 1'b1;
+  assign mosi = mosi_b;
 
 endmodule
