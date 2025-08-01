@@ -92,7 +92,7 @@ module spi_master_bmm150 #(
       IDLE: if (enable && start) next_state = SEND_RW;
       SEND_RW: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = SEND_ADDR;
       SEND_ADDR:
-      if (prev_sclk_b == 1'b1 && sclk_b == 1'b0 && bits_cnt == 0) next_state = SEND_RECEIVE_DATA;
+      if (prev_sclk_b == 1'b0 && sclk_b == 1'b1 && bits_cnt == 0) next_state = SEND_RECEIVE_DATA;
       SEND_RECEIVE_DATA: if (bits_cnt == 7) next_state = COMPLETE;
       COMPLETE: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = IDLE;
       default: next_state = IDLE;
