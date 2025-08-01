@@ -93,7 +93,7 @@ module spi_master_bmm150 #(
       SEND_RW: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = SEND_ADDR;
       SEND_ADDR:
       if (prev_sclk_b == 1'b0 && sclk_b == 1'b1 && bits_cnt == 0) next_state = SEND_RECEIVE_DATA;
-      SEND_RECEIVE_DATA: if (bits_cnt == 7) next_state = COMPLETE;
+      SEND_RECEIVE_DATA: if (bits_cnt == 8) next_state = COMPLETE;
       COMPLETE: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = IDLE;
       default: next_state = IDLE;
     endcase
@@ -128,15 +128,13 @@ module spi_master_bmm150 #(
         end
         SEND_RECEIVE_DATA: begin
           if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
-            rx_data[7-bits_cnt] <= miso;
-            mosi_b <= tx_data[7-bits_cnt];
+            rx_data[7-bits_cnt+1] <= miso;
+            mosi_b <= tx_data[7-bits_cnt+1];
             bits_cnt <= bits_cnt + 1;
           end
         end
         COMPLETE: begin
           if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
-            rx_data[7-bits_cnt] <= miso;
-            mosi_b <= tx_data[7-bits_cnt];
             done <= 1'b1;
           end
         end
