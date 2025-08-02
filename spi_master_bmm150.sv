@@ -13,15 +13,15 @@ module spi_master_bmm150 #(
     input logic enable,
 
     // Control Interface
-    input  logic       start,     // Start SPI transaction
-    input  logic       burst,     // Burst readout
-    input  logic       rw,        // 0=Write, 1=Read
-    input  logic [6:0] reg_addr,  // Register address
-    input  logic [7:0] tx_data,   // Data to send
-    output logic [7:0] rx_data,   // Data received
-    output logic [63:0] burst_data // Burst sensor data
-    output logic       busy,      // Transaction in progress
-    output logic       done,      // Transaction complete
+    input  logic        start,       // Start SPI transaction
+    input  logic        burst,       // Burst readout
+    input  logic        rw,          // 0=Write, 1=Read
+    input  logic [ 6:0] reg_addr,    // Register address
+    input  logic [ 7:0] tx_data,     // Data to send
+    output logic [ 7:0] rx_data,     // Data received
+    output logic [63:0] burst_data,  // Burst sensor data
+    output logic        busy,        // Transaction in progress
+    output logic        done,        // Transaction complete
 
     // SPI Physical Interface
     output logic sclk,
@@ -86,7 +86,7 @@ module spi_master_bmm150 #(
 
   // Internal registers
   logic mosi_b;
-  logic [4:0] bits_cnt;
+  logic [5:0] bits_cnt;
 
   // FSM combinational
   always_comb begin
@@ -158,8 +158,7 @@ module spi_master_bmm150 #(
         READ_BURST_DATA: begin
           if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
             if (bits_cnt != 0) bits_cnt <= bits_cnt - 1;
-          end else if (prev_sclk_b == 1'b0 && sclk_b == 1'b1)
-            burst_data <= {burst_data, miso};
+          end else if (prev_sclk_b == 1'b0 && sclk_b == 1'b1) burst_data <= {burst_data, miso};
         end
 
         STOP: begin
