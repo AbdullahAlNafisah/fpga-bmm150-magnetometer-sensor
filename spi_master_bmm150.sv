@@ -14,10 +14,12 @@ module spi_master_bmm150 #(
 
     // Control Interface
     input  logic       start,     // Start SPI transaction
+    input  logic       burst,     // Burst readout
     input  logic       rw,        // 0=Write, 1=Read
     input  logic [6:0] reg_addr,  // Register address
     input  logic [7:0] tx_data,   // Data to send
     output logic [7:0] rx_data,   // Data received
+    output logic [63:0] burst_data // Burst sensor data
     output logic       busy,      // Transaction in progress
     output logic       done,      // Transaction complete
 
@@ -69,6 +71,7 @@ module spi_master_bmm150 #(
     SEND_RW,
     SEND_ADDR,
     SEND_RECEIVE_DATA,
+    READ_BURST_DATA,
     STOP
   } state_t;
   state_t state, next_state;
@@ -93,8 +96,13 @@ module spi_master_bmm150 #(
       START: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = SEND_RW;
       SEND_RW: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = SEND_ADDR;
       SEND_ADDR:
-      if (prev_sclk_b == 1'b1 && sclk_b == 1'b0 && bits_cnt == 0) next_state = SEND_RECEIVE_DATA;
+      if (prev_sclk_b == 1'b1 && sclk_b == 1'b0 && bits_cnt == 0) begin
+        if (burst == 1'b1) next_state = READ_BURST_DATA;
+        else next_state = SEND_RECEIVE_DATA;
+      end
       SEND_RECEIVE_DATA:
+      if (prev_sclk_b == 1'b0 && sclk_b == 1'b1 && bits_cnt == 0) next_state = STOP;
+      READ_BURST_DATA:
       if (prev_sclk_b == 1'b0 && sclk_b == 1'b1 && bits_cnt == 0) next_state = STOP;
       STOP: if (sclk_b == 1'b1) next_state = IDLE;
       default: next_state = IDLE;
@@ -108,6 +116,8 @@ module spi_master_bmm150 #(
       mosi_b <= 1'b1;
       bits_cnt <= 0;
       done <= 1'b0;
+      rx_data <= 8'h00;
+      burst_data <= 64'd0;
     end else begin
       case (state)
         IDLE: begin
@@ -130,7 +140,10 @@ module spi_master_bmm150 #(
             mosi_b <= reg_addr[bits_cnt];
             if (prev_sclk_b == 1'b1) begin
               if (bits_cnt != 0) bits_cnt <= bits_cnt - 1;
-              else bits_cnt <= 7;
+              else begin
+                if (burst) bits_cnt <= 63;
+                else bits_cnt <= 7;
+              end
             end
           end
         end
@@ -139,10 +152,16 @@ module spi_master_bmm150 #(
             mosi_b <= tx_data[bits_cnt];
             if (prev_sclk_b == 1'b1) begin
               if (bits_cnt != 0) bits_cnt <= bits_cnt - 1;
-              else bits_cnt <= 7;
             end
           end else if (prev_sclk_b == 1'b0 && sclk_b == 1'b1) rx_data <= {rx_data, miso};
         end
+        READ_BURST_DATA: begin
+          if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
+            if (bits_cnt != 0) bits_cnt <= bits_cnt - 1;
+          end else if (prev_sclk_b == 1'b0 && sclk_b == 1'b1)
+            burst_data <= {burst_data, miso};
+        end
+
         STOP: begin
           if (prev_sclk_b == 1'b1) begin
             done <= 1'b1;
@@ -152,6 +171,8 @@ module spi_master_bmm150 #(
           busy <= 1'b1;
           mosi_b <= 1'b1;
           bits_cnt <= 0;
+          rx_data <= 8'h00;
+          burst_data <= 64'd0;
         end
       endcase
     end
