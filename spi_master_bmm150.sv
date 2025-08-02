@@ -61,15 +61,15 @@ module spi_master_bmm150 #(
       sclk_b <= 1'b1;
     end
   end
-  assign sclk = (state != IDLE && next_state != IDLE) ? sclk_b : 1'b1;
 
   // FSM States
   typedef enum logic [7:0] {
     IDLE,
+    START,
     SEND_RW,
     SEND_ADDR,
     SEND_RECEIVE_DATA,
-    COMPLETE
+    STOP
   } state_t;
   state_t state, next_state;
   always_ff @(posedge clk or negedge rst_n) begin
@@ -89,12 +89,14 @@ module spi_master_bmm150 #(
   always_comb begin
     next_state = state;
     case (state)
-      IDLE: if (enable && start) next_state = SEND_RW;
+      IDLE: if (enable && start) next_state = START;
+      START: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = SEND_RW;
       SEND_RW: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = SEND_ADDR;
       SEND_ADDR:
-      if (prev_sclk_b == 1'b0 && sclk_b == 1'b1 && bits_cnt == 0) next_state = SEND_RECEIVE_DATA;
-      SEND_RECEIVE_DATA: if (bits_cnt == 8) next_state = COMPLETE;
-      COMPLETE: if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) next_state = IDLE;
+      if (prev_sclk_b == 1'b1 && sclk_b == 1'b0 && bits_cnt == 0) next_state = SEND_RECEIVE_DATA;
+      SEND_RECEIVE_DATA:
+      if (prev_sclk_b == 1'b0 && sclk_b == 1'b1 && bits_cnt == 0) next_state = STOP;
+      STOP: if (sclk_b == 1'b1) next_state = IDLE;
       default: next_state = IDLE;
     endcase
   end
@@ -113,28 +115,36 @@ module spi_master_bmm150 #(
           done   <= 1'b0;
           mosi_b <= 1'b1;
         end
+        START: begin
+          busy <= 1'b1;
+        end
         SEND_RW: begin
           busy <= 1'b1;
-          if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
+          if (sclk_b == 1'b0) begin
             mosi_b   <= rw;
-            bits_cnt <= 7;
+            bits_cnt <= 6;
           end
         end
         SEND_ADDR: begin
-          if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
-            mosi_b <= reg_addr[bits_cnt-1];
-            if (bits_cnt != 0) bits_cnt <= bits_cnt - 1;
+          if (sclk_b == 1'b0) begin
+            mosi_b <= reg_addr[bits_cnt];
+            if (prev_sclk_b == 1'b1) begin
+              if (bits_cnt != 0) bits_cnt <= bits_cnt - 1;
+              else bits_cnt <= 7;
+            end
           end
         end
         SEND_RECEIVE_DATA: begin
-          if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
-            rx_data[7-bits_cnt+1] <= miso;
-            mosi_b <= tx_data[7-bits_cnt+1];
-            bits_cnt <= bits_cnt + 1;
-          end
+          if (sclk_b == 1'b0) begin
+            mosi_b <= tx_data[bits_cnt];
+            if (prev_sclk_b == 1'b1) begin
+              if (bits_cnt != 0) bits_cnt <= bits_cnt - 1;
+              else bits_cnt <= 7;
+            end
+          end else if (prev_sclk_b == 1'b0 && sclk_b == 1'b1) rx_data <= {rx_data, miso};
         end
-        COMPLETE: begin
-          if (prev_sclk_b == 1'b1 && sclk_b == 1'b0) begin
+        STOP: begin
+          if (prev_sclk_b == 1'b1) begin
             done <= 1'b1;
           end
         end
@@ -147,6 +157,7 @@ module spi_master_bmm150 #(
     end
   end
   assign cs_n = (state != IDLE) ? 1'b0 : 1'b1;
+  assign sclk = (state != IDLE && next_state != IDLE) ? sclk_b : 1'b1;
   assign mosi = mosi_b;
 
 endmodule
