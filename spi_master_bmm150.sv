@@ -104,7 +104,7 @@ module spi_master_bmm150 #(
       if (prev_sclk_b == 1'b0 && sclk_b == 1'b1 && bits_cnt == 0) next_state = STOP;
       READ_BURST_DATA:
       if (prev_sclk_b == 1'b0 && sclk_b == 1'b1 && bits_cnt == 0) next_state = STOP;
-      STOP: if (prev_sclk_b == 1'b0 && sclk_b == 1'b1) next_state = IDLE;
+      STOP: if (sclk_b == 1'b1) next_state = IDLE;
       default: next_state = IDLE;
     endcase
   end
@@ -162,7 +162,7 @@ module spi_master_bmm150 #(
         end
 
         STOP: begin
-          if (prev_sclk_b == 1'b0 && sclk_b == 1'b1) begin
+          if (prev_sclk_b == 1'b1) begin
             done <= 1'b1;
           end
         end
